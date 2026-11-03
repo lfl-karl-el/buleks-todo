@@ -189,9 +189,11 @@ const ZH = {
     remindDaily: "每小时提醒未完成的今日事项（Windows 通知）",
     remindDue: "每小时提醒今日截止的待办（Windows 通知）",
     notifyDailyTitle: "今日事项提醒",
-    notifyDailyBody: "今日还有 {0} 项事项未完成",
+    notifyDailyBody: "今日还有 {0} 项事项未完成：",
     notifyDueTitle: "待办截止提醒",
-    notifyDueBody: "有 {0} 项待办今日截止",
+    notifyDueBody: "有 {0} 项待办今日截止：",
+    notifyMore: "…还有 {0} 项",
+    notifyUntitled: "（无标题）",
     openDoc: "打开文档",
     createDoc: "新建思源文档",
     docCreated: "思源文档已创建",
@@ -412,19 +414,29 @@ module.exports = class TodoHub extends Plugin {
             const s = this.board.settings || {};
             // ① 未完成的今日事项
             if (s.remindDaily !== false) {
-                const n = (this.board.daily.items || []).filter((x) => x.day === today && !x.done).length;
-                if (n > 0) this.sysNotify(this.t("notifyDailyTitle"), this.t("notifyDailyBody", n), "daily");
+                const list = (this.board.daily.items || []).filter((x) => x.day === today && !x.done);
+                if (list.length > 0) this.sysNotify(this.t("notifyDailyTitle"), this.notifyBody(list, "notifyDailyBody"), "daily");
             }
             // ② 今日截止、仍未完成的待办
             if (s.remindDue !== false) {
                 const sod = startOfDay(now.getTime());
-                const n = (this.board.tasks || []).filter((t) =>
-                    t.dueAt && startOfDay(t.dueAt) === sod && (t.status === "todo" || t.status === "doing")).length;
-                if (n > 0) this.sysNotify(this.t("notifyDueTitle"), this.t("notifyDueBody", n), "due");
+                const list = (this.board.tasks || []).filter((t) =>
+                    t.dueAt && startOfDay(t.dueAt) === sod && (t.status === "todo" || t.status === "doing"));
+                if (list.length > 0) this.sysNotify(this.t("notifyDueTitle"), this.notifyBody(list, "notifyDueBody"), "due");
             }
         } catch (e) {
             console.error("[buleks-todo] remindTick failed", e);
         }
+    }
+
+    // 通知正文：首行数量汇总，下面列出标题（最多 5 条，多出的折叠）
+    notifyBody(list, key) {
+        const MAX = 5;
+        const titles = list.map((x) => (x.title || "").trim() || this.t("notifyUntitled"));
+        const lines = [this.t(key, list.length)];
+        titles.slice(0, MAX).forEach((t) => lines.push(`· ${t}`));
+        if (titles.length > MAX) lines.push(this.t("notifyMore", titles.length - MAX));
+        return lines.join("\n");
     }
 
     sysNotify(title, body, tag) {
@@ -432,11 +444,19 @@ module.exports = class TodoHub extends Plugin {
             const N = window.Notification;
             if (!N) return;
             const fire = () => {
+                // 上一条同类通知还在的话，先关掉再发，实现自动覆盖
+                this._notes = this._notes || {};
+                const prev = this._notes[tag];
+                if (prev) {
+                    try { prev.close(); } catch (e) { /* ignore */ }
+                    this._notes[tag] = null;
+                }
                 const note = new N(title, { body, tag: `buleks-todo-${tag}` });
                 note.onclick = () => {
                     try { window.focus(); } catch (e) { /* ignore */ }
                     this.openBoard(false);
                 };
+                this._notes[tag] = note;
             };
             if (N.permission === "granted") {
                 fire();
