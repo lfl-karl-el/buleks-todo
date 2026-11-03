@@ -163,6 +163,17 @@ const ZH = {
     relinkCleared: "已清除关联文档",
     clearDoc: "清除关联",
     clearDocConfirm: "确定清除该待办的关联文档？清除后可重新生成或再次关联。",
+    dailyTitle: "今日事项",
+    viewBoard: "待办",
+    cordTip: "拉一下切换：待办 / 今日事项",
+    dailyInputTip: "记一件今天要做的事，回车快速添加（可多行）",
+    add: "添加",
+    dailyEmpty: "还没有记录今天的事项，先加一件吧",
+    dailyToggle: "完成 / 取消完成",
+    dailyHistory: "历史事项",
+    dailyHistCount: "{0} 天",
+    dailyMore: "还有更早的 {0} 天，点击加载",
+    dailyRestore: "带回今天",
     batchToggle: "批量",
     batchSelCount: "已选 {0} 项",
     batchSelectAll: "全选",
@@ -175,6 +186,12 @@ const ZH = {
     batchNoSelection: "请先勾选待办",
     batchNothingChanged: "选中待办无需更新",
     settingsSaved: "设置已保存",
+    remindDaily: "每小时提醒未完成的今日事项（Windows 通知）",
+    remindDue: "每小时提醒今日截止的待办（Windows 通知）",
+    notifyDailyTitle: "今日事项提醒",
+    notifyDailyBody: "今日还有 {0} 项事项未完成",
+    notifyDueTitle: "待办截止提醒",
+    notifyDueBody: "有 {0} 项待办今日截止",
     openDoc: "打开文档",
     createDoc: "新建思源文档",
     docCreated: "思源文档已创建",
@@ -242,6 +259,13 @@ const ICONS = `<symbol id="iconTodoHub" viewBox="0 0 32 32">
 <symbol id="iconImport" viewBox="0 0 32 32">
 <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M16 5v13m0 0-5.5-5.5M16 18l5.5-5.5"/>
 <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 20.5V25a2.5 2.5 0 0 0 2.5 2.5h17A2.5 2.5 0 0 0 27 25v-4.5"/>
+</symbol>
+<symbol id="iconDaily" viewBox="0 0 32 32">
+<path fill="currentColor" opacity=".16" d="M6.5 6h19A1.5 1.5 0 0 1 27 7.5v19a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 5 26.5v-19A1.5 1.5 0 0 1 6.5 6Z"/>
+<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" d="M6.5 6.5h19a1 1 0 0 1 1 1v19a1 1 0 0 1-1 1h-19a1 1 0 0 1-1-1v-19a1 1 0 0 1 1-1Z"/>
+<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M10 3.5v5m12-5v5M5.5 12.5h21"/>
+<path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m11.5 20.5 3 3 6-6.5"/>
+</symbol>
 </symbol>`;
 
 /* ---------------- 插件 ---------------- */
@@ -280,7 +304,7 @@ module.exports = class TodoHub extends Plugin {
             this.board.ui.tags = this.board.ui.tag ? [this.board.ui.tag] : [];
         }
         delete this.board.ui.tag;
-        this.board.settings = Object.assign({ notebook: "", basePath: "待办中心" }, this.board.settings || {});
+        this.board.settings = Object.assign({ notebook: "", basePath: "待办中心", remindDaily: true, remindDue: true }, this.board.settings || {});
         this.board.groups.forEach((g, i) => {
             if (!g.id) g.id = uid("g");
             if (!g.color) g.color = PALETTE[i % PALETTE.length];
@@ -292,6 +316,18 @@ module.exports = class TodoHub extends Plugin {
             t.tags = Array.isArray(t.tags) ? t.tags : [];
         });
         this.board.archiveYears = Array.isArray(this.board.archiveYears) ? this.board.archiveYears : [];
+
+        // 今日事项：与待办独立；按 day(YYYY-MM-DD) 分组，昨日未完成自动归入历史区
+        this.board.daily = this.board.daily || {};
+        this.board.daily.items = Array.isArray(this.board.daily.items) ? this.board.daily.items : [];
+        this.board.daily.ui = Object.assign({ showHistory: true, histLimit: 7 }, this.board.daily.ui || {});
+        delete this.board.daily.confirmClose; // v0.6.2 起退出提醒功能已移除
+        this.board.daily.items.forEach((x) => {
+            if (!x.id) x.id = uid("d");
+            if (!x.day) x.day = this.todayStr(new Date(x.createdAt || Date.now()));
+            x.done = !!x.done;
+            if (!x.createdAt) x.createdAt = Date.now();
+        });
 
         // 归档数据：按年份分文件 archive-YYYY.json
         this.archives = {};
@@ -337,12 +373,79 @@ module.exports = class TodoHub extends Plugin {
             position: "right",
             callback: () => this.openBoard(false),
         });
+        this.startReminder();
     }
 
     onunload() {
         if (this.saveTimer) clearTimeout(this.saveTimer);
+        this.stopReminder();
         const css = document.getElementById("buleks-todo-css");
         if (css) css.remove();
+    }
+
+    /* ---------------- 整点系统通知 ---------------- */
+    // 每小时一次：① 未完成的今日事项  ② 今日截止的待办
+    // 通知用 Web Notification API（Electron 渲染进程在 Windows 上直接出系统 Toast）
+    startReminder() {
+        this.stopReminder();
+        this._lastRemindKey = "";
+        // 启动后 20 秒先提醒一次，之后每个整点提醒
+        setTimeout(() => this.remindTick(), 20 * 1000);
+        this.remindTimer = setInterval(() => this.remindTick(), 60 * 1000);
+    }
+
+    stopReminder() {
+        if (this.remindTimer) {
+            clearInterval(this.remindTimer);
+            this.remindTimer = null;
+        }
+    }
+
+    remindTick() {
+        try {
+            const now = new Date();
+            // 每个「小时」只发一次（按 natural hour 去重）
+            const hourKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}`;
+            if (hourKey === this._lastRemindKey) return;
+            this._lastRemindKey = hourKey;
+            const today = this.todayStr(now);
+            const s = this.board.settings || {};
+            // ① 未完成的今日事项
+            if (s.remindDaily !== false) {
+                const n = (this.board.daily.items || []).filter((x) => x.day === today && !x.done).length;
+                if (n > 0) this.sysNotify(this.t("notifyDailyTitle"), this.t("notifyDailyBody", n), "daily");
+            }
+            // ② 今日截止、仍未完成的待办
+            if (s.remindDue !== false) {
+                const sod = startOfDay(now.getTime());
+                const n = (this.board.tasks || []).filter((t) =>
+                    t.dueAt && startOfDay(t.dueAt) === sod && (t.status === "todo" || t.status === "doing")).length;
+                if (n > 0) this.sysNotify(this.t("notifyDueTitle"), this.t("notifyDueBody", n), "due");
+            }
+        } catch (e) {
+            console.error("[buleks-todo] remindTick failed", e);
+        }
+    }
+
+    sysNotify(title, body, tag) {
+        try {
+            const N = window.Notification;
+            if (!N) return;
+            const fire = () => {
+                const note = new N(title, { body, tag: `buleks-todo-${tag}` });
+                note.onclick = () => {
+                    try { window.focus(); } catch (e) { /* ignore */ }
+                    this.openBoard(false);
+                };
+            };
+            if (N.permission === "granted") {
+                fire();
+            } else if (N.permission !== "denied") {
+                N.requestPermission().then((p) => { if (p === "granted") fire(); }).catch(() => {});
+            }
+        } catch (e) {
+            console.error("[buleks-todo] system notify failed", e);
+        }
     }
 
     openBoard(withNew) {
@@ -684,6 +787,14 @@ module.exports = class TodoHub extends Plugin {
       <input id="tbSetBasePath" class="b3-text-field" value="${esc(s.basePath || "")}" placeholder="${esc(this.t("settingsBasePathPlaceholder"))}" />
     </label>
     <div class="tb-set-hint">${esc(this.t("settingsHint"))}</div>
+    <label class="tb-set-check">
+      <input type="checkbox" id="tbSetRemindDaily" class="b3-switch"${s.remindDaily !== false ? " checked" : ""} />
+      <span>${esc(this.t("remindDaily"))}</span>
+    </label>
+    <label class="tb-set-check">
+      <input type="checkbox" id="tbSetRemindDue" class="b3-switch"${s.remindDue !== false ? " checked" : ""} />
+      <span>${esc(this.t("remindDue"))}</span>
+    </label>
   </div>
   <div class="tb-set-foot">
     <button class="b3-button b3-button--cancel" id="tbSetCancel">${esc(this.t("cancel"))}</button>
@@ -708,6 +819,8 @@ module.exports = class TodoHub extends Plugin {
         el.querySelector("#tbSetOk").addEventListener("click", () => {
             this.board.settings.notebook = el.querySelector("#tbSetNotebook").value;
             this.board.settings.basePath = el.querySelector("#tbSetBasePath").value.trim();
+            this.board.settings.remindDaily = el.querySelector("#tbSetRemindDaily").checked;
+            this.board.settings.remindDue = el.querySelector("#tbSetRemindDue").checked;
             this.save();
             dlg.destroy();
             showMessage(this.t("settingsSaved"));
@@ -840,6 +953,145 @@ module.exports = class TodoHub extends Plugin {
         this.save();
         this.render();
         showMessage(this.t("unarchive") + " ✓");
+    }
+
+    /* ---------------- 今日事项 ---------------- */
+    // 今日事项与待办相互独立：轻量、只属于某一天；未完成跨天后自动落入历史区（渲染按 day 分组）
+    todayStr(d) {
+        const dt = d instanceof Date ? d : new Date(d || Date.now());
+        const p = (n) => String(n).padStart(2, "0");
+        return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+    }
+
+    bindDailyEvents(root) {
+        const el = this.el.daily;
+        el.input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") this.dailyAdd();
+        });
+        root.addEventListener("click", (ev) => {
+            const btn = ev.target.closest("[data-act]");
+            if (!btn) return;
+            const act = btn.dataset.act;
+            const row = btn.closest("[data-did]");
+            const id = row ? row.dataset.did : "";
+            if (act === "daily-add") this.dailyAdd();
+            else if (act === "daily-toggle") this.dailyToggle(id);
+            else if (act === "daily-del") this.dailyDelete(id);
+            else if (act === "daily-history-toggle") {
+                this.board.daily.ui.showHistory = !this.board.daily.ui.showHistory;
+                this.save();
+                this.renderDaily();
+            } else if (act === "daily-more") {
+                this.board.daily.ui.histLimit += 7;
+                this.save();
+                this.renderDaily();
+            } else if (act === "daily-restore") {
+                // 把历史里的未完成事项带回今天
+                const x = (this.board.daily.items || []).find((i) => i.id === id);
+                if (x && !x.done) {
+                    x.day = this.todayStr();
+                    x.restoredAt = Date.now();
+                    this.save();
+                    this.renderDaily();
+                }
+            }
+        });
+    }
+
+    dailyAdd() {
+        const el = this.el.daily;
+        const text = (el.input.value || "").trim();
+        if (!text) return;
+        const today = this.todayStr();
+        text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).forEach((line) => {
+            this.board.daily.items.push({
+                id: uid("d"),
+                title: line,
+                day: today,
+                done: false,
+                createdAt: Date.now(),
+            });
+        });
+        el.input.value = "";
+        this.save();
+        this.renderDaily();
+    }
+
+    dailyToggle(id) {
+        const x = (this.board.daily.items || []).find((i) => i.id === id);
+        if (!x) return;
+        x.done = !x.done;
+        x.doneAt = x.done ? Date.now() : null;
+        this.save();
+        this.renderDaily();
+    }
+
+    dailyDelete(id) {
+        this.board.daily.items = this.board.daily.items.filter((i) => i.id !== id);
+        this.save();
+        this.renderDaily();
+    }
+
+    dailyRowHtml(x, isToday) {
+        return `<div class="tb-dl-row${x.done ? " is-done" : ""}" data-did="${x.id}">
+  <button class="tb-dl-check${x.done ? " is-on" : ""}" data-act="daily-toggle" title="${esc(this.t("dailyToggle"))}"><svg><use xlink:href="#iconCheck"></use></svg></button>
+  <span class="tb-dl-title">${esc(x.title)}</span>
+  ${x.day !== this.todayStr() && !x.done ? `<button class="tb-dl-mini" data-act="daily-restore" title="${esc(this.t("dailyRestore"))}"><svg><use xlink:href="#iconRefresh"></use></svg>${esc(this.t("dailyRestore"))}</button>` : ""}
+  <button class="tb-dl-x" data-act="daily-del" title="${esc(this.t("deleteTask"))}"><svg><use xlink:href="#iconClose"></use></svg></button>
+</div>`;
+    }
+
+    renderDaily() {
+        const el = this.el.daily;
+        if (!el) return;
+        const now = new Date();
+        const today = this.todayStr(now);
+        const items = this.board.daily.items || [];
+        const todayItems = items.filter((x) => x.day === today);
+        const doneN = todayItems.filter((x) => x.done).length;
+        const week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][now.getDay()];
+        el.date.textContent = `${now.getMonth() + 1}月${now.getDate()}日 · ${week}`;
+        el.stat.textContent = todayItems.length ? `${doneN}/${todayItems.length}` : "";
+
+        // 今日：未完成在上，已完成在下
+        const sortRow = (a, b) => (a.done === b.done ? (b.createdAt || 0) - (a.createdAt || 0) : (a.done ? 1 : 0) - (b.done ? 0 : 1));
+        todayItems.sort(sortRow);
+        el.today.innerHTML = todayItems.length
+            ? todayItems.map((x) => this.dailyRowHtml(x, true)).join("")
+            : `<div class="tb-dl-empty">${esc(this.t("dailyEmpty"))}</div>`;
+
+        // 历史区：day < today，按天倒序；未完成的排前且标红
+        const days = new Map();
+        items.forEach((x) => {
+            if (x.day >= today) return;
+            if (!days.has(x.day)) days.set(x.day, []);
+            days.get(x.day).push(x);
+        });
+        const dayKeys = [...days.keys()].sort((a, b) => (a < b ? 1 : -1));
+        const showN = Math.min(this.board.daily.ui.histLimit || 7, dayKeys.length);
+        const head = dayKeys.length
+            ? `<div class="tb-dl-histhead" data-act="daily-history-toggle">
+  <svg class="tb-sec-arrow${this.board.daily.ui.showHistory ? "" : " is-collapsed"}"><use xlink:href="#iconDown"></use></svg>
+  <span>${esc(this.t("dailyHistory"))}</span>
+  <span class="tb-dl-histmeta">${esc(this.t("dailyHistCount", dayKeys.length))}</span>
+</div>`
+            : "";
+        let body = "";
+        if (this.board.daily.ui.showHistory) {
+            dayKeys.slice(0, showN).forEach((day) => {
+                const list = days.get(day).sort(sortRow);
+                const dn = list.filter((x) => x.done).length;
+                const wd = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][new Date(day.replace(/-/g, "/")).getDay()];
+                body += `<div class="tb-dl-day">
+  <div class="tb-dl-dayhead"><span>${day.slice(5).replace("-", "/")} ${wd}</span><span class="tb-dl-daystat">${dn}/${list.length}</span></div>
+  ${list.map((x) => this.dailyRowHtml(x, false)).join("")}
+</div>`;
+            });
+            if (dayKeys.length > showN) {
+                body += `<button class="tb-dl-more" data-act="daily-more">${esc(this.t("dailyMore", dayKeys.length - showN))}</button>`;
+            }
+        }
+        el.history.innerHTML = head + `<div class="tb-dl-histbody"${this.board.daily.ui.showHistory ? "" : ' style="display:none"'}>` + body + `</div>`;
     }
 
     matchesSearch(task) {
@@ -1068,13 +1320,18 @@ module.exports = class TodoHub extends Plugin {
     initBoard(tab) {
         tab.element.innerHTML = `
 <div class="tb-app">
+  <button class="tb-cord${this.view === "daily" ? " is-daily" : ""}" data-act="toggle-view" title="${esc(this.t("cordTip"))}">
+    <span class="tb-cord-line"></span>
+    <span class="tb-cord-handle"><span class="tb-cord-name">${esc(this.view === "daily" ? this.t("dailyTitle") : this.t("viewBoard"))}</span></span>
+  </button>
+  <div class="tb-boardwrap">
   <header class="tb-head">
     <div class="tb-brand">
       <svg class="tb-logo"><use xlink:href="#iconTodoHub"></use></svg>
       <span class="tb-brand-name">${esc(this.t("title"))}</span>
       <span class="tb-brand-stat"></span>
     </div>
-    <div class="tb-head-right">
+    <div class="tb-head-right tb-actions-board">
       <button class="tb-iconbtn" data-act="import-tasks" title="${esc(this.t("importBtn"))}"><svg><use xlink:href="#iconImport"></use></svg></button>
       <button class="tb-iconbtn" data-act="archive-closed" title="${esc(this.t("archiveBtn"))}"><svg><use xlink:href="#iconInbox"></use></svg></button>
       <button class="tb-iconbtn" data-act="open-settings" title="${esc(this.t("settings"))}"><svg><use xlink:href="#iconSettings"></use></svg></button>
@@ -1099,17 +1356,42 @@ module.exports = class TodoHub extends Plugin {
     <main class="tb-main"></main>
     <aside class="tb-detail"></aside>
   </div>
+  </div>
+  <main class="tb-daily" style="display:none">
+    <div class="tb-dl-headrow">
+      <span class="tb-daily-date"></span>
+      <span class="tb-daily-stat"></span>
+    </div>
+    <div class="tb-dl-inputrow">
+      <input class="tb-dl-input" type="text" placeholder="${esc(this.t("dailyInputTip"))}" />
+      <button class="tb-primary" data-act="daily-add"><svg><use xlink:href="#iconAdd"></use></svg><span>${esc(this.t("add"))}</span></button>
+    </div>
+    <div class="tb-dl-today"></div>
+    <div class="tb-dl-history"></div>
+  </main>
 </div>`;
 
         const root = tab.element.querySelector(".tb-app");
         this.el = {
             root,
+            cord: root.querySelector(".tb-cord"),
+            cordName: root.querySelector(".tb-cord-name"),
+            boardWrap: root.querySelector(".tb-boardwrap"),
+            dailyPanel: root.querySelector(".tb-daily"),
             rail: root.querySelector(".tb-groups"),
             main: root.querySelector(".tb-main"),
             detail: root.querySelector(".tb-detail"),
             stat: root.querySelector(".tb-brand-stat"),
             search: root.querySelector(".tb-search-input"),
         };
+        this.el.daily = {
+            date: root.querySelector(".tb-daily-date"),
+            stat: root.querySelector(".tb-daily-stat"),
+            input: root.querySelector(".tb-dl-input"),
+            today: root.querySelector(".tb-dl-today"),
+            history: root.querySelector(".tb-dl-history"),
+        };
+        this.bindDailyEvents(root);
 
         root.addEventListener("click", (e) => this.onClick(e));
         root.addEventListener("contextmenu", (e) => this.onContextMenu(e));
@@ -1140,7 +1422,35 @@ module.exports = class TodoHub extends Plugin {
                 }
             }
         });
+        this.switchView(this.view === "daily" ? "daily" : "board");
         this.render();
+    }
+
+    // 同一页签内切换 待办看板 / 今日事项 两个视图；顶部拉绳 click 调用 pullCord 触发切换
+    switchView(v) {
+        this.view = v === "daily" ? "daily" : "board";
+        if (!this.el.root) return;
+        const isDaily = this.view === "daily";
+        this.el.boardWrap.style.display = isDaily ? "none" : "";
+        this.el.dailyPanel.style.display = isDaily ? "" : "none";
+        if (this.el.cord) this.el.cord.classList.toggle("is-daily", isDaily);
+        if (this.el.cordName) this.el.cordName.textContent = isDaily ? this.t("dailyTitle") : this.t("viewBoard");
+        if (isDaily) this.renderDaily();
+    }
+
+    // 拉绳交互：先做下拉动画，动画中段切换视图，再弹回
+    pullCord() {
+        const cord = this.el.cord;
+        const next = this.view === "daily" ? "board" : "daily";
+        if (!cord) {
+            this.switchView(next);
+            return;
+        }
+        cord.classList.add("is-pulled");
+        setTimeout(() => {
+            this.switchView(next);
+            cord.classList.remove("is-pulled");
+        }, 150);
     }
 
     /* ---------------- 渲染 ---------------- */
@@ -1674,6 +1984,9 @@ module.exports = class TodoHub extends Plugin {
                 break;
             case "open-settings":
                 this.openSettingsDialog();
+                break;
+            case "toggle-view":
+                this.pullCord();
                 break;
             case "import-tasks":
                 this.openImportDialog();

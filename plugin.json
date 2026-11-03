@@ -1,37 +1,42 @@
 {
   "name": "buleks-todo",
-  "author": "lfl-karl-el",
-  "url": "https://github.com/lfl-karl-el/buleks-todo",
-  "version": "0.5.6",
+  "author": "study",
+  "url": "",
+  "version": "0.6.6",
   "minAppVersion": "3.0.0",
   "backends": [
-    "all"
+    "windows",
+    "linux",
+    "darwin",
+    "docker",
+    "ios",
+    "android",
+    "harmony"
   ],
   "frontends": [
-    "all"
+    "desktop",
+    "desktop-window",
+    "mobile",
+    "browser-desktop",
+    "browser-mobile"
   ],
   "displayName": {
     "default": "Buleks Todo",
-    "zh-CN": "Blueks代办",
     "zh_CN": "Blueks代办"
   },
   "description": {
-    "default": "A standalone todo board in a SiYuan tab: tasks with status flow, groups and tags, archive by year, batch operations, history import and a 7-day summary.",
-    "zh-CN": "独立任务看板（页签内）：待办状态流转、分组与标签、按年归档、批量操作、历史清单导入、近7天汇总，可一键生成并跳转思源文档。",
-    "zh_CN": "独立任务看板（页签内）：待办状态流转、分组与标签、按年归档、批量操作、历史清单导入、近7天汇总，可一键生成并跳转思源文档。"
+    "default": "A standalone todo board: create tasks, move them through statuses, organize by feature groups and tags, with a 7-day completion summary on top.",
+    "zh_CN": "独立任务看板：新增待办、状态流转、按功能分组与标签查看，首页近7天完成汇总，可一键生成/跳转思源文档。"
   },
   "readme": {
-    "default": "README.md",
-    "zh-CN": "README.zh-CN.md"
+    "default": "README.md"
   },
-  "icon": "icon.png",
   "keywords": [
     "todo",
     "task",
-    "kanban",
+    "timeline",
     "待办",
     "任务",
-    "看板",
     "需求"
   ]
 }

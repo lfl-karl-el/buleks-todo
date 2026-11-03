@@ -559,6 +559,21 @@
     width: 100%;
 }
 
+.tb-set-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 2px;
+    font-size: 12px;
+    color: var(--b3-theme-on-surface);
+    cursor: pointer;
+}
+
+.tb-set-check input {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
 .tb-set-hint {
     margin: 10px 0 4px;
     font-size: 11px;
@@ -1415,4 +1430,343 @@
 
 .tb-card.is-batch .tb-card-body {
     cursor: pointer;
+}
+
+/* 今日事项 */
+.tb-daily {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 18px 40px;
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.tb-daily-date {
+    font-size: 13px;
+    color: var(--b3-theme-on-surface);
+    margin-left: 8px;
+}
+
+.tb-daily-stat {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--b3-theme-primary);
+    margin-left: 6px;
+}
+
+.tb-dl-inputrow {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.tb-dl-input {
+    flex: 1;
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 6px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    outline: none;
+    transition: border-color .12s;
+}
+
+.tb-dl-input:focus {
+    border-color: var(--b3-theme-primary);
+}
+
+.tb-dl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background .12s;
+}
+
+.tb-dl-row:hover {
+    background: var(--b3-list-hover);
+}
+
+.tb-dl-row .tb-dl-x {
+    opacity: 0;
+    transition: opacity .12s;
+}
+
+.tb-dl-row:hover .tb-dl-x {
+    opacity: 1;
+}
+
+.tb-dl-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 17px;
+    height: 17px;
+    border: 1.5px solid var(--b3-border-color);
+    border-radius: 50%;
+    background: var(--b3-theme-background);
+    color: #fff;
+    cursor: pointer;
+    transition: border-color .12s, background .12s;
+}
+
+.tb-dl-check:hover {
+    border-color: var(--b3-theme-primary);
+}
+
+.tb-dl-check.is-on {
+    border-color: var(--b3-theme-primary);
+    background: var(--b3-theme-primary);
+}
+
+.tb-dl-check svg {
+    width: 11px !important;
+    height: 11px !important;
+}
+
+.tb-dl-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tb-dl-row.is-done .tb-dl-title {
+    color: var(--b3-theme-on-surface);
+    opacity: .55;
+    text-decoration: line-through;
+}
+
+.tb-dl-mini {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex: none;
+    font-size: 11px;
+    line-height: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--b3-theme-warning, #d98000);
+    border-radius: 5px;
+    color: var(--b3-theme-warning, #d98000);
+    background: transparent;
+    cursor: pointer;
+    transition: background .12s;
+}
+
+.tb-dl-mini:hover {
+    background: rgba(217, 128, 0, .1);
+}
+
+.tb-dl-mini svg {
+    width: 10px !important;
+    height: 10px !important;
+}
+
+.tb-dl-x {
+    flex: none;
+    display: inline-flex;
+    border: none;
+    background: transparent;
+    color: var(--b3-theme-on-surface);
+    opacity: .6;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.tb-dl-x:hover {
+    color: var(--b3-theme-error, #d23f31);
+    opacity: 1;
+}
+
+.tb-dl-x svg {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+.tb-dl-empty {
+    font-size: 12px;
+    color: var(--b3-theme-on-surface);
+    opacity: .6;
+    padding: 14px 8px;
+    text-align: center;
+}
+
+.tb-dl-histhead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 22px;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-top: 1px solid var(--b3-border-color);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--b3-theme-on-surface);
+    user-select: none;
+}
+
+.tb-dl-histhead .tb-sec-arrow {
+    width: 12px;
+    height: 12px;
+    transition: transform .15s;
+}
+
+.tb-dl-histhead .tb-sec-arrow.is-collapsed {
+    transform: rotate(-90deg);
+}
+
+.tb-dl-histmeta {
+    font-weight: 400;
+    opacity: .6;
+}
+
+.tb-dl-day {
+    margin-top: 8px;
+}
+
+.tb-dl-dayhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--b3-theme-on-surface);
+    padding: 2px 8px;
+}
+
+.tb-dl-daystat {
+    opacity: .6;
+}
+
+.tb-dl-day .tb-dl-row.is-done .tb-dl-title {
+    opacity: .45;
+}
+
+.tb-dl-more {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 7px;
+    font-size: 12px;
+    color: var(--b3-theme-primary);
+    background: transparent;
+    border: 1px dashed var(--b3-border-color);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.tb-dl-more:hover {
+    border-color: var(--b3-theme-primary);
+}
+
+.tb-dl-headrow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+
+/* 待办视图专属容器（顶栏 + 看板），今日事项视图时整体隐藏 */
+.tb-boardwrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 顶部拉绳切换器（拉一下切换 待办 / 今日事项） */
+.tb-app {
+    position: relative;
+}
+
+.tb-cord {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: grab;
+    z-index: 30;
+    transition: transform .14s cubic-bezier(.4, 1.6, .6, 1);
+}
+
+.tb-cord:active {
+    cursor: grabbing;
+}
+
+.tb-cord.is-pulled {
+    transform: translateX(-50%) translateY(10px);
+}
+
+.tb-cord-line {
+    width: 2px;
+    height: 20px;
+    border-radius: 1px;
+    background: linear-gradient(var(--b3-border-color), var(--b3-theme-on-surface));
+    opacity: .5;
+}
+
+.tb-cord-handle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    height: 19px;
+    margin-top: -1px;
+    padding: 0 9px;
+    border: 1px solid var(--b3-border-color);
+    border-top: none;
+    border-radius: 0 0 9px 9px;
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
+    font-size: 10.5px;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+    transition: background .12s, color .12s, border-color .12s;
+}
+
+/* 绳与吊牌连接处的小挂环 */
+.tb-cord-handle::after {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 6px;
+    border: 1.5px solid var(--b3-theme-on-surface);
+    border-radius: 50%;
+    background: var(--b3-theme-background);
+    opacity: .4;
+}
+
+.tb-cord.is-daily .tb-cord-handle::after {
+    border-color: #fff;
+    background: var(--b3-theme-primary);
+    opacity: .9;
+}
+
+.tb-cord:hover .tb-cord-handle {
+    color: var(--b3-theme-primary);
+    border-color: var(--b3-theme-primary);
+}
+
+.tb-cord.is-daily .tb-cord-handle {
+    background: var(--b3-theme-primary);
+    border-color: var(--b3-theme-primary);
+    color: #fff;
 }
