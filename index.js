@@ -17,6 +17,7 @@ const STORAGE_KEY = "board.json";      // 存储文件（带后缀）
 const LEGACY_KEY = "board";            // 旧版无后缀文件，仅用于迁移读取
 const ARCHIVE_PREFIX = "archive-";     // 归档文件前缀：archive-YYYY.json
 const PAGE_SIZE = 50;                  // 列表分页：每页渲染条数
+const AUMID = "org.b3log.siyuan";      // 思源的 Windows Toast 应用标识（main.js 里 setAppUserModelId 同款）
 
 const STATUSES = ["todo", "doing", "done", "closed", "cancelled"];
 const STATUS_COLOR = {
@@ -410,6 +411,8 @@ module.exports = class TodoHub extends Plugin {
             const hourKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}`;
             if (hourKey === this._lastRemindKey) return;
             this._lastRemindKey = hourKey;
+            // 先清掉通知中心里残留的旧 Toast（上个会话/上个整点发的），再发新的 → 桌面上始终只有最新一组
+            this.clearToastHistory();
             const today = this.todayStr(now);
             const s = this.board.settings || {};
             // ① 未完成的今日事项
@@ -437,6 +440,22 @@ module.exports = class TodoHub extends Plugin {
         titles.slice(0, MAX).forEach((t) => lines.push(`· ${t}`));
         if (titles.length > MAX) lines.push(this.t("notifyMore", titles.length - MAX));
         return lines.join("\n");
+    }
+
+    // Windows 通知中心里残留的旧 Toast（上个会话/上个整点发的）没有对象可 close()，
+    // 只能走系统 WinRT API 按思源的 AUMID 清历史；失败时静默降级（不影响发通知）
+    clearToastHistory() {
+        try {
+            const script =
+                "[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] | Out-Null; " +
+                `[Windows.UI.Notifications.ToastNotificationManager]::History.Clear('${AUMID}')`;
+            // execFile 在调用时取，便于测试替换
+            require("child_process").execFile("powershell.exe",
+                ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
+                { timeout: 10000, windowsHide: true }, () => { /* 忽略结果 */ });
+        } catch (e) {
+            console.error("[buleks-todo] clear toast history failed", e);
+        }
     }
 
     sysNotify(title, body, tag) {
