@@ -411,8 +411,17 @@ module.exports = class TodoHub extends Plugin {
             const hourKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}`;
             if (hourKey === this._lastRemindKey) return;
             this._lastRemindKey = hourKey;
-            // 先清掉通知中心里残留的旧 Toast（上个会话/上个整点发的），再发新的 → 桌面上始终只有最新一组
-            this.clearToastHistory();
+            console.log("[buleks-todo] remindTick", hourKey);
+            // 先清掉通知中心里残留的旧 Toast，等清理完成后才发新的：
+            // 清理是异步的（PowerShell 冷启动 1~3 秒），若不等待，Clear 会把刚发出的新 Toast 一并清掉
+            this.clearToastHistory(() => this.sendReminders(now));
+        } catch (e) {
+            console.error("[buleks-todo] remindTick failed", e);
+        }
+    }
+
+    sendReminders(now) {
+        try {
             const today = this.todayStr(now);
             const s = this.board.settings || {};
             // ① 未完成的今日事项
@@ -428,7 +437,7 @@ module.exports = class TodoHub extends Plugin {
                 if (list.length > 0) this.sysNotify(this.t("notifyDueTitle"), this.notifyBody(list, "notifyDueBody"), "due");
             }
         } catch (e) {
-            console.error("[buleks-todo] remindTick failed", e);
+            console.error("[buleks-todo] sendReminders failed", e);
         }
     }
 
@@ -443,8 +452,9 @@ module.exports = class TodoHub extends Plugin {
     }
 
     // Windows 通知中心里残留的旧 Toast（上个会话/上个整点发的）没有对象可 close()，
-    // 只能走系统 WinRT API 按思源的 AUMID 清历史；失败时静默降级（不影响发通知）
-    clearToastHistory() {
+    // 只能走系统 WinRT API 按思源的 AUMID 清历史；完成（或失败）后回调 cb，再发新通知
+    clearToastHistory(cb) {
+        const done = () => { try { cb && cb(); } catch (e) { /* ignore */ } };
         try {
             const script =
                 "[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] | Out-Null; " +
@@ -452,9 +462,10 @@ module.exports = class TodoHub extends Plugin {
             // execFile 在调用时取，便于测试替换
             require("child_process").execFile("powershell.exe",
                 ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
-                { timeout: 10000, windowsHide: true }, () => { /* 忽略结果 */ });
+                { timeout: 8000, windowsHide: true }, () => done());
         } catch (e) {
             console.error("[buleks-todo] clear toast history failed", e);
+            done(); // 失败也要继续发通知
         }
     }
 
@@ -463,6 +474,7 @@ module.exports = class TodoHub extends Plugin {
             const N = window.Notification;
             if (!N) return;
             const fire = () => {
+                console.log(`[buleks-todo] notify ${tag}, permission=${N.permission}`);
                 // 上一条同类通知还在的话，先关掉再发，实现自动覆盖
                 this._notes = this._notes || {};
                 const prev = this._notes[tag];
