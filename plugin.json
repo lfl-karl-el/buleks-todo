@@ -2,7 +2,7 @@
   "name": "buleks-todo",
   "author": "lfl-karl-el",
   "url": "https://github.com/lfl-karl-el/buleks-todo",
-  "version": "0.6.9",
+  "version": "0.6.10",
   "minAppVersion": "3.0.0",
   "backends": [
     "windows",

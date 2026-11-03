@@ -1378,8 +1378,6 @@ module.exports = class TodoHub extends Plugin {
   <div class="tb-boardwrap">
   <header class="tb-head">
     <div class="tb-brand">
-      <svg class="tb-logo"><use xlink:href="#iconTodoHub"></use></svg>
-      <span class="tb-brand-name">${esc(this.t("title"))}</span>
       <span class="tb-brand-stat"></span>
     </div>
     <div class="tb-head-right tb-actions-board">
